@@ -1,0 +1,551 @@
+#to know the details of that file 
+dir "D:\Downloads\big_logs_5GB.csv"
+
+cd C:\Users\DEVI B\Downloads
+Run:
+THIS GIVES THE COLUMN NAMES AND THE FIRST 5 ROWS 
+powershell -Command "Get-Content big_logs_5GB.csv -TotalCount 5" 
+
+
+
+
+#connect to docker and pull
+docker compose up -d
+
+#to list all the containers
+docker ps -a
+
+#stop all the running nodes like name node data node etc 
+docker stop datanode namenode resourcemanager nodemanager
+
+#removing the nodes 
+docker rm datanode namenode resourcemanager nodemanager
+
+#Step 1 — Stop All Containers
+for /f %i in ('docker ps -aq') do docker stop %i
+
+#Step 2 — Remove All Containers
+for /f %i in ('docker ps -aq') do docker rm %i
+ 
+Create new folder:
+D:\Hadoop_Docker
+
+Go inside:
+cd D:\Hadoop_Docker
+
+Create file inside Hadoop_Docker folder:
+
+file name : docker-compose.yml(YAML =Yet Another Markup Language)
+
+
+
+services:
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    environment:
+      CLUSTER_NAME: test
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - namenode:/hadoop/dfs/name
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SERVICE_PRECONDITION: namenode:9870
+    volumes:
+      - datanode:/hadoop/dfs/data
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SERVICE_PRECONDITION: namenode:9000
+
+  nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SERVICE_PRECONDITION: resourcemanager:8088
+
+volumes:
+  namenode:
+  datanode:
+
+
+Whenever you want to restart Hadoop cluster:
+Stop:
+docker compose down
+Start:
+docker compose up -d
+
+
+Run:
+docker compose up -d
+
+docker ps
+
+
+
+
+
+FEATURES
+1.Failed Login Attempt Analysis (Per Geo Location)
+2.Traffic Spike Detection per IP(Group by Source_IP AND Calculate average or max Packet_Rate)
+3.Attack Type Distribution Analysis
+4.Geo-Based Threat Analysis
+5.High Flow Duration / Abnormal Session
+
+
+
+#You copied the file from:
+Windows (C:\Users\DEVI B\Downloads)
+        ↓
+Inside Docker container (namenode)
+
+
+docker cp "C:\Users\DEVI B\Downloads\big_logs_5GB.csv" namenode:/big_logs_5GB.csv
+
+
+#INSIDE THE CONTAINER
+docker exec -it namenode bash
+
+#CHECKING WHETHER THE FILE IS IN THE CONTAINER OR NOT
+ls -lh
+
+
+HDFS
+
+#Now create HDFS directory:
+hdfs dfs -mkdir /logs
+
+#Now upload into HDFS:
+hdfs dfs -put big_logs_5GB.csv /logs/
+
+NOW CHECK IN HDFS 
+http://localhost:9870/dfshealth.html#tab-overview
+
+
+
+MAPREDUCE
+#Inside container type:
+Run:
+exit
+
+Now you are back to Windows CMD.
+
+Run:
+notepad mapper1.py
+
+
+#!/usr/bin/env python3
+import sys
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    fields = [f.strip() for f in line.split(",")]
+
+    # Skip header safely
+    if len(fields) < 3:
+        continue
+
+    if "Destination Port" in fields[0]:
+        continue
+
+    try:
+        geo = fields[-1]
+        failed = int(float(fields[-3]))
+
+        if geo and failed >= 0:
+            print(geo + "\t" + str(failed))
+
+    except:
+        continue
+
+
+
+
+
+
+Create Reducer Files 
+Run:
+notepad reducer1.py
+
+#!/usr/bin/env python3
+import sys
+
+current_geo = None
+total = 0
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    parts = line.split("\t")
+
+    if len(parts) != 2:
+        continue
+
+    geo = parts[0]
+
+    try:
+        value = int(parts[1])
+    except:
+        continue
+
+    if current_geo == geo:
+        total += value
+    else:
+        if current_geo is not None:
+            print(current_geo + "\t" + str(total))
+        current_geo = geo
+        total = value
+
+if current_geo is not None:
+    print(current_geo + "\t" + str(total))
+
+
+
+
+#upto now we have created the files in our local desktop now we need to copy the files to our containers 
+
+docker cp mapper1.py namenode:/mapper1.py
+docker cp reducer1.py namenode:/reducer1.py
+docker exec -it namenode bash
+ls -lh /
+
+
+#making the files executable 
+chmod +x /mapper1.py
+chmod +x /reducer1.py
+
+
+
+#Move to /root Inside container:
+cd /root
+
+#Check:
+ls
+
+#If you don’t see mapper and reducer there, move them:
+
+mv /mapper1.py /root/
+mv /reducer1.py /root/
+
+#Now confirm:
+
+ls
+
+#You should see:
+
+mapper1.py
+reducer1.py
+
+#Make Executable Again (Just in case)
+chmod +x mapper1.py
+chmod +x reducer1.py
+hdfs dfs -rm -r /output_failed_login_geo
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper1.py,reducer1.py \
+-mapper "python3 mapper1.py" \
+-reducer "python3 reducer1.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_failed_login_geo
+
+
+
+hdfs dfs -cat /output_failed_login_geo/part-00000
+
+
+
+#FEATURE2
+
+notepad mapper2.py
+
+#!/usr/bin/env python3
+import sys
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    fields = [f.strip() for f in line.split(",")]
+
+    if len(fields) < 3:
+        continue
+
+    if "Destination Port" in fields[0]:
+        continue
+
+    try:
+        geo = fields[-1]
+        packet_rate = float(fields[-2])   # Packet_Rate column
+
+        if geo:
+            print(geo + "\t" + str(packet_rate))
+    except:
+        continue
+
+
+notepad reducer2.py
+
+#!/usr/bin/env python3
+import sys
+
+current_geo = None
+total = 0.0
+count = 0
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    parts = line.split("\t")
+
+    if len(parts) != 2:
+        continue
+
+    geo = parts[0]
+
+    try:
+        value = float(parts[1])
+    except:
+        continue
+
+    if current_geo == geo:
+        total += value
+        count += 1
+    else:
+        if current_geo is not None and count > 0:
+            avg = total / count
+            print(current_geo + "\t" + str(avg))
+
+        current_geo = geo
+        total = value
+        count = 1
+
+if current_geo is not None and count > 0:
+    avg = total / count
+    print(current_geo + "\t" + str(avg))
+
+
+
+
+docker cp mapper2.py namenode:/root/mapper2.py
+docker cp reducer2.py namenode:/root/reducer2.py
+docker exec -it namenode bash
+cd /root
+chmod +x mapper2.py
+chmod +x reducer2.py
+
+hdfs dfs -rm -r /output_packet_rate_geo
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper2.py,reducer2.py \
+-mapper "python3 mapper2.py" \
+-reducer "python3 reducer2.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_packet_rate_geo
+
+
+
+hdfs dfs -cat /output_packet_rate_geo/part-00000
+
+
+
+#FEATURE3
+
+notepad mapper3.py
+
+
+#!/usr/bin/env python3
+import sys
+
+THRESHOLD = 100000.0
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    fields = [f.strip() for f in line.split(",")]
+
+    if len(fields) < 3:
+        continue
+
+    if "Destination Port" in fields[0]:
+        continue
+
+    try:
+        geo = fields[-1]
+        flow_packets = float(fields[15])   # Flow Packets/s column index
+
+        if flow_packets > THRESHOLD:
+            print(geo + "\t1")
+
+    except:
+        continue
+
+
+notepad reducer3.py
+
+
+#!/usr/bin/env python3
+import sys
+
+current_geo = None
+count = 0
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    parts = line.split("\t")
+
+    if len(parts) != 2:
+        continue
+
+    geo = parts[0]
+
+    if current_geo == geo:
+        count += 1
+    else:
+        if current_geo is not None:
+            print(current_geo + "\t" + str(count))
+        current_geo = geo
+        count = 1
+
+if current_geo is not None:
+    print(current_geo + "\t" + str(count))
+
+
+
+docker cp mapper3.py namenode:/root/mapper3.py
+docker cp reducer3.py namenode:/root/reducer3.py
+docker exec -it namenode bash
+cd /root
+chmod +x mapper3.py
+chmod +x reducer3.py
+hdfs dfs -rm -r /output_ddos_spikes
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper3.py,reducer3.py \
+-mapper "python3 mapper3.py" \
+-reducer "python3 reducer3.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_ddos_spikes
+
+hdfs dfs -cat /output_ddos_spikes/part-00000
+
+
+FEATURE4
+
+notepad mapper4.py
+
+
+#!/usr/bin/env python3
+import sys
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    fields = [f.strip() for f in line.split(",")]
+
+    if len(fields) < 2:
+        continue
+
+    # Skip header
+    if "Destination Port" in fields[0]:
+        continue
+
+    try:
+        label = fields[-4]   # Label column position
+
+        if label:
+            print(label + "\t1")
+    except:
+        continue
+
+
+notepad reducer4.py
+
+#!/usr/bin/env python3
+import sys
+
+current_label = None
+count = 0
+
+for line in sys.stdin:
+    line = line.strip()
+
+    if not line:
+        continue
+
+    parts = line.split("\t")
+
+    if len(parts) != 2:
+        continue
+
+    label = parts[0]
+
+    if current_label == label:
+        count += 1
+    else:
+        if current_label is not None:
+            print(current_label + "\t" + str(count))
+        current_label = label
+        count = 1
+
+if current_label is not None:
+    print(current_label + "\t" + str(count))
+
+
+
+docker cp mapper4.py namenode:/root/mapper4.py
+docker cp reducer4.py namenode:/root/reducer4.py
+docker exec -it namenode bash
+
+cd /root
+chmod +x mapper4.py
+chmod +x reducer4.py
+
+hdfs dfs -rm -r /output_attack_distribution
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper4.py,reducer4.py \
+-mapper "python3 mapper4.py" \
+-reducer "python3 reducer4.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_attack_distribution
+
+
+hdfs dfs -cat /output_attack_distribution/part-00000
+
+
+
+

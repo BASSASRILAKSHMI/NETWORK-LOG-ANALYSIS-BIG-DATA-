@@ -1,0 +1,72 @@
+docker --version
+
+docker compose up -d
+
+docker ps
+
+docker exec -it namenode bash
+
+cd /root
+
+ls
+
+#FEATURE 1 — Failed Login Attempts per Geo
+
+hdfs dfs -rm -r /output_failed_login_geo
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper1.py,reducer1.py \
+-mapper "python3 mapper1.py" \
+-reducer "python3 reducer1.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_failed_login_geo
+
+hdfs dfs -cat /output_failed_login_geo/part-00000
+
+
+#FEATURE 2 — Average Packet Rate per Geo
+
+hdfs dfs -rm -r /output_packet_rate_geo
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper2.py,reducer2.py \
+-mapper "python3 mapper2.py" \
+-reducer "python3 reducer2.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_packet_rate_geo
+
+
+hdfs dfs -cat /output_packet_rate_geo/part-00000
+
+
+
+#FEATURE 3 — Traffic Spike / DDoS Detection
+
+hdfs dfs -rm -r /output_ddos_spikes
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper3.py,reducer3.py \
+-mapper "python3 mapper3.py" \
+-reducer "python3 reducer3.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_ddos_spikes
+
+hdfs dfs -cat /output_ddos_spikes/part-00000
+
+
+
+#FEATURE 4 — Attack Type Distribution
+
+hdfs dfs -rm -r /output_attack_distribution
+
+hadoop jar /opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar \
+-files mapper4.py,reducer4.py \
+-mapper "python3 mapper4.py" \
+-reducer "python3 reducer4.py" \
+-input /logs/big_logs_5GB.csv \
+-output /output_attack_distribution
+
+hdfs dfs -cat /output_attack_distribution/part-00000
+
+
+
